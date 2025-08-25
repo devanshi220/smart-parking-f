@@ -11,9 +11,9 @@ import AdminPanel from './components/AdminPanel'
 
 function isAdminAuthenticated() {
   try {
-    const isAdmin = localStorage.getItem('isAdmin') === 'true'
-    const adminUser = JSON.parse(localStorage.getItem('adminUser') || 'null')
-    return Boolean(isAdmin && adminUser && adminUser.role === 'admin')
+    const isAdmin = localStorage.getItem('isAdmin') === 'true';
+    const adminToken = localStorage.getItem('adminToken');
+    return Boolean(isAdmin && adminToken)
   } catch {
     return false
   }

@@ -1,17 +1,43 @@
-import React, { useState } from "react";
-import { Link } from "react-router-dom";
-
-const navLinks = [
+import React, { useEffect, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+export default function Header() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const navigate = useNavigate();
+  const [isVerified, setIsVerified] = useState(false);
+  const [isAdmin,setIsAdmin] = useState(false);
+  const navLinks = isVerified?isAdmin?[
+  { name: "Home", href: "/" },
+  { name: "Admin", href: "/admin" },
+  ]:[
   { name: "Home", href: "/" },
   { name: "Book Slot", href: "/book-slot" },
   { name: "My Bookings", href: "/my-bookings" },
-  { name: "Login/Register", href: "/login" },
+]:[
+  { name: "Home", href: "/" },
+  { name: "Login", href: "/login" },
   { name: "Admin", href: "/admin" },
 ];
 
-export default function Header() {
-  const [menuOpen, setMenuOpen] = useState(false);
+const handleLogout = () =>{
+  localStorage.removeItem("authToken");
+  localStorage.removeItem("adminToken");
+  localStorage.removeItem("isAdmin");
+  setIsVerified(false);
+  navigate("/login");
+}
 
+  useEffect(()=>{
+    const authToken = localStorage.getItem("authToken");
+    const adminToken = localStorage.getItem("adminToken");
+    const isAdmin = localStorage.getItem("isAdmin")==="true";
+    if((authToken && authToken.length > 0) ||
+       (adminToken && adminToken.length > 0)) {
+      setIsVerified(true);
+    }
+    if(isAdmin) {
+      setIsAdmin(true);
+    }
+  },[navigate])
   return (
     <header className="bg-white shadow-md w-full sticky top-0 left-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between h-16">
@@ -31,6 +57,7 @@ export default function Header() {
               {link.name}
             </Link>
           ))}
+         {isVerified && <button className="text-gray-200 transition-colors duration-200 bg-red-500 font-medium px-3 py-2 rounded-md hover:bg-red-600" onClick={handleLogout}>LogOut</button>}
         </nav>
         {/* Hamburger */}
         <div className="md:hidden flex items-center">

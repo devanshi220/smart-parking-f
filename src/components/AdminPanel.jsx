@@ -1,241 +1,346 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 
+// A simple reusable modal component for confirmations, alerts, and forms.
+const Modal = ({ title, children, onClose, isOpen }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
+      <div className={`relative bg-white rounded-xl shadow-2xl ${String(title).startsWith("Bookings")?"min-w-full":"w-full"} max-w-lg max-h-[90vh] overflow-y-auto`}>
+        {/* Modal Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          <button onClick={onClose} className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-600">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+            </svg>
+          </button>
+        </div>
+        {/* Modal Body */}
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Main AdminPanel component
 export default function AdminPanel() {
-  const navigate = useNavigate()
-  const [showBookings, setShowBookings] = useState(false)
-  const [selectedBooking, setSelectedBooking] = useState(null)
-  const [selectedSlot, setSelectedSlot] = useState(null)
-  const [showAddSlot, setShowAddSlot] = useState(false)
-  const [slotForm, setSlotForm] = useState({ name: '', location: '', capacity: '' })
-  const [showEditSlot, setShowEditSlot] = useState(false)
-  const [slotToEdit, setSlotToEdit] = useState(null)
-  const [editCapacity, setEditCapacity] = useState('')
-  const [slots, setSlots] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('parkingSlots') || '[]')
-    } catch {
-      return []
-    }
-  })
+  const navigate = useNavigate();
+  
+  // State for different UI views and data
+  const [showBookings, setShowBookings] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
+  const [showAddSlot, setShowAddSlot] = useState(false);
+  const [showUpdateSlot, setShowUpdateSlot] = useState(false);
+  const [modalMessage, setModalMessage] = useState(null);
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [adminData, setAdminData] = useState(null);
+  const [parkingSlots, setParkingSlots] = useState([]);
+  const [slotBookings, setSlotBookings] = useState([]);
+  
+  // Loading and error states
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [slotsLoading, setSlotsLoading] = useState(true);
+  const [slotsError, setSlotsError] = useState(null);
+  const [bookingsLoading, setBookingsLoading] = useState(false);
+  const [bookingsError, setBookingsError] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
-  // Seed sample data for slots and bookings on first load if empty
+  // Form states
+  const [slotForm, setSlotForm] = useState({ name: '', address: '', totalSlots: '', isOpen: true });
+  const [slotFormErrors, setSlotFormErrors] = useState({});
+  const [updateSlotForm, setUpdateSlotForm] = useState({ id: '', name: '', totalSlots: '', isOpen: true });
+  const [updateSlotFormErrors, setUpdateSlotFormErrors] = useState({});
+
+  // Use a key to force a re-fetch of data
+  const [fetchKey, setFetchKey] = useState(0);
+
+  // Function to show a custom message modal
+  const showModalMessage = (title, message) => {
+    setModalMessage({ title, message, type: 'info' });
+  };
+  
+  // Function to show a custom confirmation modal
+  const showConfirm = (title, message, onConfirm) => {
+    setModalMessage({ title, message, type: 'confirm' });
+    setConfirmAction(() => onConfirm);
+  };
+  
+  // Function to close all modals
+  const closeModal = () => {
+    setShowBookings(false);
+    setShowAddSlot(false);
+    setShowUpdateSlot(false);
+    setModalMessage(null);
+    setConfirmAction(null);
+    setSelectedSlot(null);
+    setSlotBookings([]);
+  };
+
+  // Effect hook to fetch admin data and parking slots on component mount or `fetchKey` change
   useEffect(() => {
-    try {
-      const storedSlots = JSON.parse(localStorage.getItem('parkingSlots') || '[]')
-      const storedBookings = JSON.parse(localStorage.getItem('bookings') || '[]')
+    const adminToken = localStorage.getItem('adminToken');
+    const isAdmin = localStorage.getItem('isAdmin') === 'true';
 
-      if (!storedSlots || storedSlots.length === 0) {
-        const seededSlots = [
-          { id: Date.now() - 30000, name: 'Central City Lot', location: 'Downtown, Main St.', capacity: 120, createdAt: new Date(Date.now() - 86400000 * 3).toISOString() },
-          { id: Date.now() - 20000, name: 'Mall Parking', location: 'City Mall, 2nd Ave.', capacity: 80, createdAt: new Date(Date.now() - 86400000 * 2).toISOString() },
-          { id: Date.now() - 10000, name: 'Tech Park Lot', location: 'Tech Park, Silicon Blvd.', capacity: 150, createdAt: new Date(Date.now() - 86400000).toISOString() },
-        ]
-        localStorage.setItem('parkingSlots', JSON.stringify(seededSlots))
-        setSlots(seededSlots)
-      }
-
-      if (!storedBookings || storedBookings.length === 0) {
-        const now = Date.now()
-        const seededBookings = [
-          {
-            id: now - 5000,
-            owner: 'John Smith',
-            mobile: '9876543210',
-            VehicleNumber: 'MH-12-AB-1234',
-            VehicleModel: 'Honda City',
-            timeSlot: '9AM-11AM',
-            lot: { name: 'Central City Lot', location: 'Downtown, Main St.' },
-            bookingDate: new Date(now - 86400000 * 2).toISOString(),
-            status: 'Confirmed',
-          },
-          {
-            id: now - 4000,
-            owner: 'Sarah Johnson',
-            mobile: '8765432109',
-            VehicleNumber: 'DL-01-CD-5678',
-            VehicleModel: 'Maruti Swift',
-            timeSlot: '11AM-1PM',
-            lot: { name: 'Mall Parking', location: 'City Mall, 2nd Ave.' },
-            bookingDate: new Date(now - 86400000 * 1.5).toISOString(),
-            status: 'Confirmed',
-          },
-          {
-            id: now - 3000,
-            owner: 'Michael Brown',
-            mobile: '7654321098',
-            VehicleNumber: 'KA-05-EF-9012',
-            VehicleModel: 'Hyundai i20',
-            timeSlot: '1PM-3PM',
-            lot: { name: 'Tech Park Lot', location: 'Tech Park, Silicon Blvd.' },
-            bookingDate: new Date(now - 86400000).toISOString(),
-            status: 'Pending',
-          },
-          {
-            id: now - 2000,
-            owner: 'Emily Davis',
-            mobile: '6543210987',
-            VehicleNumber: 'TN-07-GH-3456',
-            VehicleModel: 'Tata Nexon',
-            timeSlot: '3PM-5PM',
-            lot: { name: 'Central City Lot', location: 'Downtown, Main St.' },
-            bookingDate: new Date(now - 43200000).toISOString(),
-            status: 'Confirmed',
-          },
-          {
-            id: now - 1000,
-            owner: 'Aisha Khan',
-            mobile: '9123456780',
-            VehicleNumber: 'GJ-01-XY-7890',
-            VehicleModel: 'Suzuki Baleno',
-            timeSlot: '11AM-1PM',
-            lot: { name: 'Mall Parking', location: 'City Mall, 2nd Ave.' },
-            bookingDate: new Date(now - 21600000).toISOString(),
-            status: 'Confirmed',
-          },
-        ]
-        localStorage.setItem('bookings', JSON.stringify(seededBookings))
-      }
-    } catch (e) {
-      // ignore
+    if (!adminToken || !isAdmin) {
+      navigate('/admin-login', { replace: true });
+      return;
     }
-  }, [])
-  let adminUser = null
-  try {
-    adminUser = JSON.parse(localStorage.getItem('adminUser') || 'null')
-  } catch {
-    adminUser = null
-  }
 
-  function handleLogout() {
-    localStorage.removeItem('isAdmin')
-    localStorage.removeItem('adminUser')
-    navigate('/', { replace: true })
-  }
+    // Fetch admin details
+    const fetchAdminDetails = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const { data } = await axios.get('http://localhost:8080/auth/admin', {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        setAdminData({ ...data, name: `${data.firstName} ${data.lastName}` });
+      } catch (err) {
+        console.error('Failed to fetch admin details:', err);
+        if (err.response && err.response.status === 401) {
+          localStorage.removeItem('adminToken');
+          localStorage.removeItem('isAdmin');
+          navigate('/admin-login', { replace: true });
+        } else {
+          setError('Could not load admin details. Please try refreshing.');
+        }
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    
+    // Fetch all parking slots
+    const fetchParkingSlots = async () => {
+      setSlotsLoading(true);
+      setSlotsError(null);
+      try {
+        const { data } = await axios.get('http://localhost:8080/api/parking-lots', {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        setParkingSlots(data);
+      } catch (err) {
+        console.error('Failed to fetch parking slots:', err);
+        setSlotsError('Could not load parking slots. Please try refreshing.');
+      } finally {
+        setSlotsLoading(false);
+      }
+    };
+    
+    fetchAdminDetails();
+    fetchParkingSlots();
+  }, [navigate, fetchKey]);
 
-  const allBookings = useMemo(() => {
-    try {
-      return JSON.parse(localStorage.getItem('bookings') || '[]')
-    } catch {
-      return []
-    }
-  }, [showBookings, selectedSlot])
-
-  const slotBookings = useMemo(() => {
-    if (!selectedSlot) return []
-    return allBookings.filter(b => b?.lot?.name === selectedSlot.name && b?.lot?.location === selectedSlot.location)
-  }, [allBookings, selectedSlot])
-
-  function openSlotBookings(slot) {
-    setSelectedSlot(slot)
-    setSelectedBooking(null)
-    setShowBookings(true)
-  }
-
-  function closeModal() {
-    setShowBookings(false)
-    setSelectedBooking(null)
-    setSelectedSlot(null)
-  }
-
-  function viewBooking(booking) {
-    setSelectedBooking(booking)
-  }
+  // --- Functions for Parking Slots ---
 
   function openAddSlotModal() {
-    setSlotForm({ name: '', location: '', capacity: '' })
-    setShowAddSlot(true)
-  }
-
-  function closeAddSlotModal() {
-    setShowAddSlot(false)
+    setSlotForm({ name: '', address: '', totalSlots: '', isOpen: true });
+    setSlotFormErrors({});
+    setShowAddSlot(true);
   }
 
   function handleSlotFormChange(e) {
-    const { name, value } = e.target
-    setSlotForm(prev => ({ ...prev, [name]: value }))
-  }
-
-  function saveSlots(next) {
-    localStorage.setItem('parkingSlots', JSON.stringify(next))
-    setSlots(next)
-  }
-
-  function addSlot(e) {
-    e?.preventDefault?.()
-    if (!slotForm.name.trim() || !slotForm.location.trim()) return
-    const newSlot = {
-      id: Date.now(),
-      name: slotForm.name.trim(),
-      location: slotForm.location.trim(),
-      capacity: Number(slotForm.capacity) > 0 ? Number(slotForm.capacity) : null,
-      createdAt: new Date().toISOString(),
+    const { name, value } = e.target;
+    setSlotForm(prev => ({ ...prev, [name]: value }));
+    if (slotFormErrors[name]) {
+      setSlotFormErrors(prev => ({ ...prev, [name]: null }));
     }
-    const next = [newSlot, ...slots]
-    saveSlots(next)
-    setShowAddSlot(false)
+  }
+  
+  async function handleAddSlotSubmit(e) {
+    e.preventDefault();
+    const errors = {};
+    if (!slotForm.name.trim()) errors.name = 'Name is required';
+    if (!slotForm.address.trim()) errors.address = 'Address is required';
+    if (!slotForm.totalSlots) errors.totalSlots = 'Total slots is required';
+    else if (parseInt(slotForm.totalSlots) <= 0) errors.totalSlots = 'Total slots must be greater than 0';
+    
+    if (Object.keys(errors).length > 0) {
+      setSlotFormErrors(errors);
+      return;
+    }
+    
+    setIsSubmitting(true);
+    setSlotFormErrors({});
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      await axios.post('http://localhost:8080/api/parking-lots', {
+        ...slotForm,
+        totalSlots: parseInt(slotForm.totalSlots),
+      }, {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      showModalMessage('Success', 'Parking slot created successfully.');
+      closeModal();
+      setFetchKey(prev => prev + 1); // Trigger re-fetch
+    } catch (err) {
+      console.error('Failed to create parking slot:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to create parking slot.';
+      showModalMessage('Error', errorMessage);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
-  function deleteSlot(id) {
-    const next = slots.filter(s => s.id !== id)
-    saveSlots(next)
+  async function handleDeleteSlot(e, slotId) {
+    e.stopPropagation();
+    
+    showConfirm(
+      'Confirm Deletion',
+      'Are you sure you want to delete this parking slot? This action cannot be undone.',
+      async () => {
+        try {
+          const adminToken = localStorage.getItem('adminToken');
+          await axios.delete(`http://localhost:8080/api/parking-lots/${slotId}`, {
+            headers: { 'Authorization': `Bearer ${adminToken}` }
+          });
+          showModalMessage('Success', 'Parking slot deleted successfully.');
+          setFetchKey(prev => prev + 1); // Trigger re-fetch
+        } catch (err) {
+          console.error('Failed to delete parking slot:', err);
+          const errorMessage = err.response?.data?.message || 'Failed to delete parking slot. Please try again.';
+          showModalMessage('Error', errorMessage);
+        } finally {
+          setConfirmAction(null);
+        }
+      }
+    );
   }
 
-  function openEditSlot(e, slot) {
-    e?.stopPropagation?.()
-    setSlotToEdit(slot)
-    setEditCapacity(slot.capacity ?? '')
-    setShowEditSlot(true)
+  function openUpdateSlotModal(e, slot) {
+    e.stopPropagation();
+    setUpdateSlotForm({ 
+      id: slot.id,
+      name: slot.name,
+      totalSlots: slot.totalSlots,
+      isOpen: slot.isOpen
+    });
+    setUpdateSlotFormErrors({});
+    setShowUpdateSlot(true);
   }
 
-  function closeEditSlotModal() {
-    setShowEditSlot(false)
-    setSlotToEdit(null)
-    setEditCapacity('')
+  function handleUpdateSlotFormChange(e) {
+    const { name, type, checked, value } = e.target;
+    const newValue = type === 'checkbox' ? checked : value;
+    setUpdateSlotForm(prev => ({ ...prev, [name]: newValue }));
+    if (updateSlotFormErrors[name]) {
+      setUpdateSlotFormErrors(prev => ({ ...prev, [name]: null }));
+    }
   }
 
-  function saveEditedSlot(e) {
-    e?.preventDefault?.()
-    if (!slotToEdit) return
-    const capacityValue = String(editCapacity).trim() === '' ? null : Math.max(0, Number(editCapacity))
-    const next = slots.map(s => s.id === slotToEdit.id ? { ...s, capacity: capacityValue } : s)
-    saveSlots(next)
-    closeEditSlotModal()
+  async function handleUpdateSlotSubmit(e) {
+    e.preventDefault();
+    const errors = {};
+    if (!updateSlotForm.totalSlots) errors.totalSlots = 'Total slots is required';
+    else if (parseInt(updateSlotForm.totalSlots) <= 0) errors.totalSlots = 'Total slots must be greater than 0';
+    
+    if (Object.keys(errors).length > 0) {
+      setUpdateSlotFormErrors(errors);
+      return;
+    }
+    
+    setIsUpdating(true);
+    setUpdateSlotFormErrors({});
+    try {
+      const adminToken = localStorage.getItem('adminToken');
+      await axios.post(`http://localhost:8080/api/parking-lots/${updateSlotForm.id}/update`, {
+        totalSlots: parseInt(updateSlotForm.totalSlots),
+        isOpen: updateSlotForm.isOpen
+      }, {
+        headers: {
+          'Authorization': `Bearer ${adminToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      showModalMessage('Success', 'Parking slot updated successfully.');
+      setFetchKey(prev => prev + 1);
+      closeModal();
+    } catch (err) {
+      console.error('Failed to update parking slot:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to update parking slot. Please try again.';
+      setUpdateSlotFormErrors({ general: errorMessage });
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
+  // --- Functions for Bookings ---
+
+  function openSlotBookings(slot) {
+    setSelectedSlot(slot);
+    setShowBookings(true);
+    setSlotBookings([]);
+    setBookingsLoading(true);
+    setBookingsError(null);
+    
+    const fetchBookingsForSlot = async (slotId) => {
+      try {
+        const adminToken = localStorage.getItem('adminToken');
+        const { data } = await axios.get(`http://localhost:8080/api/parking-lots/${slotId}/bookings`, {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        setSlotBookings(data);
+      } catch (err) {
+        console.error('Failed to fetch bookings for slot:', err);
+        const errorMessage = err.response?.data?.message || 'Failed to load bookings. Please try again.';
+        setBookingsError(errorMessage);
+      } finally {
+        setBookingsLoading(false);
+      }
+    };
+    fetchBookingsForSlot(slot.id);
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-10 px-4">
+    <div className="min-h-screen bg-gray-50 py-10 px-4 font-sans">
       <div className="max-w-6xl mx-auto space-y-6">
+        {/* Header and Logout button */}
         <div className="bg-white rounded-xl shadow p-6 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
-            <p className="text-gray-600 mt-1">Welcome, {adminUser?.name || 'Admin'} ({adminUser?.email})</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-            >
-              Logout
-            </button>
+            <p className="text-gray-600 mt-1">Welcome, {adminData?.name || 'Admin'}</p>
           </div>
         </div>
 
+        {/* Admin Info Section */}
         <div className="bg-white rounded-xl shadow p-6">
           <h2 className="text-lg font-semibold text-gray-800 mb-4">Admin Info</h2>
-          <ul className="text-gray-700 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <li><span className="font-medium">Name:</span> {adminUser?.name || 'System Admin'}</li>
-            <li><span className="font-medium">Email:</span> {adminUser?.email || '-'}</li>
-            <li><span className="font-medium">Role:</span> {adminUser?.role || 'admin'}</li>
-          </ul>
+          {isLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : error ? (
+            <div className="text-red-500 py-2">{error}</div>
+          ) : (
+            <ul className="text-gray-700 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <li><span className="font-medium">Name:</span> {adminData?.name || 'System Admin'}</li>
+              <li><span className="font-medium">Email:</span> {adminData?.email || '-'}</li>
+            </ul>
+          )}
         </div>
 
+        {/* Parking Slots Section */}
         <div className="bg-white rounded-xl shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-gray-800">Parking Slots</h2>
-            <button onClick={openAddSlotModal} className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">Add Parking Slot</button>
+            <button onClick={openAddSlotModal} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-medium">Add Parking Slot</button>
           </div>
-          {slots.length === 0 ? (
+          {slotsLoading ? (
+            <div className="flex justify-center py-4">
+              <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : slotsError ? (
+            <div className="text-red-500 py-2">{slotsError}</div>
+          ) : parkingSlots?.length === 0 ? (
             <div className="text-gray-600 text-sm">No parking slots added yet.</div>
           ) : (
             <div className="overflow-x-auto">
@@ -243,22 +348,24 @@ export default function AdminPanel() {
                 <thead className="bg-gray-50">
                   <tr className="text-left text-gray-600">
                     <th className="px-4 py-3">Name</th>
-                    <th className="px-4 py-3">Location</th>
-                    <th className="px-4 py-3">Capacity</th>
-                    <th className="px-4 py-3">Created</th>
-                    <th className="px-4 py-3">Actions</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Address</th>
+                    <th className="px-4 py-3">Total Slots</th>
+                    <th className="px-4 py-3">Booked Slots</th>
+                    <th className="px-4 py-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {slots.map(slot => (
+                  {parkingSlots.map(slot => (
                     <tr key={slot.id} className="border-t hover:bg-gray-50 cursor-pointer" onClick={() => openSlotBookings(slot)}>
                       <td className="px-4 py-3 font-medium">{slot.name}</td>
-                      <td className="px-4 py-3">{slot.location}</td>
-                      <td className="px-4 py-3">{slot.capacity ?? '-'}</td>
-                      <td className="px-4 py-3">{new Date(slot.createdAt).toLocaleString()}</td>
-                      <td className="px-4 py-3 space-x-2">
-                        <button onClick={(e) => openEditSlot(e, slot)} className="px-3 py-1 bg-gray-200 text-gray-900 rounded hover:bg-gray-300">Edit</button>
-                        <button onClick={(e) => { e.stopPropagation(); deleteSlot(slot.id) }} className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">Delete</button>
+                      <td className="px-4 py-3 font-medium">{slot.isOpen ? "Open" : "Closed"}</td>
+                      <td className="px-4 py-3">{slot.address}</td>
+                      <td className="px-4 py-3">{slot.totalSlots ?? '-'}</td>
+                      <td className="px-4 py-3">{slot.bookedSlots ?? '-'}</td>
+                      <td className="px-4 py-3 space-x-2 flex justify-center">
+                        <button onClick={(e) => handleDeleteSlot(e, slot.id)} className="px-3 py-1 bg-red-600 text-white rounded-md hover:bg-red-700">Delete</button>
+                        <button onClick={(e) => openUpdateSlotModal(e, slot)} className="px-3 py-1 bg-blue-600 text-white rounded-md hover:bg-blue-700">Update</button>
                       </td>
                     </tr>
                   ))}
@@ -267,144 +374,175 @@ export default function AdminPanel() {
             </div>
           )}
         </div>
-
-        {showBookings && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={closeModal} />
-            <div className="relative bg-white rounded-xl shadow-2xl w-[95vw] max-w-5xl max-h-[85vh] overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
-                <h3 className="text-lg font-semibold">
-                  Bookings for: {selectedSlot?.name} ({selectedSlot?.location}) — {slotBookings.length}
-                </h3>
-                <button onClick={closeModal} className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200">Close</button>
-              </div>
-              <div className="overflow-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 sticky top-0">
-                    <tr className="text-left text-gray-600">
-                      <th className="px-4 py-3">ID</th>
-                      <th className="px-4 py-3">Owner</th>
-                      <th className="px-4 py-3">Mobile</th>
-                      <th className="px-4 py-3">Vehicle</th>
-                      <th className="px-4 py-3">Model</th>
-                      <th className="px-4 py-3">Lot</th>
-                      <th className="px-4 py-3">Time Slot</th>
-                      <th className="px-4 py-3">Date</th>
-                      <th className="px-4 py-3">Status</th>
-                      <th className="px-4 py-3">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {slotBookings.map(b => (
-                      <tr key={b.id} className="border-t">
-                        <td className="px-4 py-3 font-medium">{b.id}</td>
-                        <td className="px-4 py-3">{b.owner}</td>
-                        <td className="px-4 py-3">{b.mobile}</td>
-                        <td className="px-4 py-3 font-mono">{b.VehicleNumber}</td>
-                        <td className="px-4 py-3">{b.VehicleModel}</td>
-                        <td className="px-4 py-3">
-                          <div className="text-gray-900">{b.lot?.name}</div>
-                          <div className="text-gray-500 text-xs">{b.lot?.location}</div>
-                        </td>
-                        <td className="px-4 py-3">{b.timeSlot}</td>
-                        <td className="px-4 py-3">{new Date(b.bookingDate).toLocaleString()}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded border text-xs ${b.status === 'Confirmed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-700 border-gray-200'}`}>{b.status}</span>
-                        </td>
-                        <td className="px-4 py-3">
-                          <button onClick={() => viewBooking(b)} className="px-3 py-1 text-blue-600 hover:bg-blue-50 rounded">View</button>
-                        </td>
-                      </tr>
-                    ))}
-                    {slotBookings.length === 0 && (
-                      <tr>
-                        <td colSpan="10" className="px-4 py-10 text-center text-gray-500">No bookings found.</td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-
-              {selectedBooking && (
-                <div className="border-t p-4 bg-gray-50">
-                  <h4 className="font-semibold mb-2">Booking Details</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <div><span className="font-medium">Owner:</span> {selectedBooking.owner}</div>
-                      <div><span className="font-medium">Mobile:</span> {selectedBooking.mobile}</div>
-                      <div><span className="font-medium">Vehicle:</span> {selectedBooking.VehicleNumber} ({selectedBooking.VehicleModel})</div>
-                    </div>
-                    <div>
-                      <div><span className="font-medium">Lot:</span> {selectedBooking.lot?.name}</div>
-                      <div><span className="font-medium">Location:</span> {selectedBooking.lot?.location}</div>
-                      <div><span className="font-medium">Time:</span> {selectedBooking.timeSlot}</div>
-                      <div><span className="font-medium">Date:</span> {new Date(selectedBooking.bookingDate).toLocaleString()}</div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {showAddSlot && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={closeAddSlotModal} />
-            <div className="relative bg-white rounded-xl shadow-2xl w-[95vw] max-w-md overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
-                <h3 className="text-lg font-semibold">Add Parking Slot</h3>
-                <button onClick={closeAddSlotModal} className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200">Close</button>
-              </div>
-              <form onSubmit={addSlot} className="p-6 space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
-                  <input name="name" value={slotForm.name} onChange={handleSlotFormChange} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Central City Lot" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                  <input name="location" value={slotForm.location} onChange={handleSlotFormChange} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., Downtown, Main St." />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Capacity (optional)</label>
-                  <input type="number" min="0" name="capacity" value={slotForm.capacity} onChange={handleSlotFormChange} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="e.g., 120" />
-                </div>
-                <div className="pt-2 flex justify-end space-x-2">
-                  <button type="button" onClick={closeAddSlotModal} className="px-4 py-2 rounded-md border">Cancel</button>
-                  <button type="submit" className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">Add Slot</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {showEditSlot && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center">
-            <div className="absolute inset-0 bg-black/40" onClick={closeEditSlotModal} />
-            <div className="relative bg-white rounded-xl shadow-2xl w-[95vw] max-w-md overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b">
-                <h3 className="text-lg font-semibold">Edit Slot Capacity</h3>
-                <button onClick={closeEditSlotModal} className="px-3 py-1 rounded-md bg-gray-100 hover:bg-gray-200">Close</button>
-              </div>
-              <form onSubmit={saveEditedSlot} className="p-6 space-y-4">
-                <div className="text-sm text-gray-600">
-                  <div><span className="font-medium text-gray-800">Name:</span> {slotToEdit?.name}</div>
-                  <div><span className="font-medium text-gray-800">Location:</span> {slotToEdit?.location}</div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Capacity</label>
-                  <input type="number" min="0" value={editCapacity} onChange={(e) => setEditCapacity(e.target.value)} className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter capacity or leave blank to unset" />
-                </div>
-                <div className="pt-2 flex justify-end space-x-2">
-                  <button type="button" onClick={closeEditSlotModal} className="px-4 py-2 rounded-md border">Cancel</button>
-                  <button type="submit" className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">Save</button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Message Modal */}
+      {modalMessage && (
+        <Modal
+          title={modalMessage.title}
+          isOpen={!!modalMessage}
+          onClose={closeModal}
+        >
+          <div className="space-y-4">
+            <p className="text-gray-700">{modalMessage.message}</p>
+            <div className="flex justify-end space-x-2">
+              {modalMessage.type === 'confirm' && (
+                <button 
+                  onClick={() => {
+                    if (confirmAction) {
+                      confirmAction();
+                    }
+                    closeModal();
+                  }} 
+                  className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                >
+                  Confirm
+                </button>
+              )}
+              <button onClick={closeModal} className="px-4 py-2 rounded-md border text-gray-700">
+                {modalMessage.type === 'confirm' ? 'Cancel' : 'OK'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Bookings Modal */}
+      <Modal 
+        title={`Bookings for: ${selectedSlot?.name} (${selectedSlot?.address})`}
+        isOpen={showBookings} 
+        onClose={closeModal}
+      >
+        <div className="overflow-auto max-h-[60vh] -mx-6">
+          {bookingsLoading ? (
+            <div className="flex justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+            </div>
+          ) : bookingsError ? (
+            <div className="py-8 text-center">
+              <div className="text-red-500 mb-2">{bookingsError}</div>
+              <button onClick={() => openSlotBookings(selectedSlot)} className="px-4 py-2 bg-gray-200 rounded-md hover:bg-gray-300">Retry</button>
+            </div>
+          ) : (
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr className="text-left text-gray-600">
+                  <th className="px-4 py-3">ID</th>
+                  <th className="px-4 py-3">Owner</th>
+                  <th className="px-4 py-3">Mobile</th>
+                  <th className="px-4 py-3">Vehicle No</th>
+                  <th className="px-4 py-3">Vehicle Type</th>
+                  <th className="px-4 py-3">Time Slot</th>
+                  <th className="px-4 py-3">Booking Date</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {slotBookings.map(b => (
+                  <tr key={b.id} className="border-t">
+                    <td className="px-4 py-3 font-medium">{b.id}</td>
+                    <td className="px-4 py-3">{b.ownerName}</td>
+                    <td className="px-4 py-3">{b.mobileNo}</td>
+                    <td className="px-4 py-3 font-mono">{b.vehicalNo}</td>
+                    <td className="px-4 py-3">{b.vehicalType}</td>
+                    <td className="px-4 py-3">{b.timingSlot}</td>
+                    <td className="px-4 py-3">{new Date(b.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full border text-xs font-semibold ${b.status === 'Confirmed' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-50 text-gray-900 border-gray-200'}`}>
+                        {b.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {slotBookings?.length === 0 && !bookingsLoading && (
+                  <tr>
+                    <td colSpan="8" className="px-4 py-10 text-center text-gray-500">No bookings found for this slot.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </Modal>
+
+      {/* Add Slot Modal */}
+      <Modal
+        title="Add Parking Slot"
+        isOpen={showAddSlot}
+        onClose={closeModal}
+      >
+        <form className="space-y-4" onSubmit={handleAddSlotSubmit}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Name*</label>
+            <input name="name" value={slotForm.name} onChange={handleSlotFormChange} className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 ${slotFormErrors.name ? 'border-red-500' : 'border-gray-300'}`} placeholder="e.g., Central City Lot" />
+            {slotFormErrors.name && <p className="text-red-500 text-xs mt-1">{slotFormErrors.name}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Address*</label>
+            <input name="address" value={slotForm.address} onChange={handleSlotFormChange} className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 ${slotFormErrors.address ? 'border-red-500' : 'border-gray-300'}`} placeholder="e.g., Downtown, Main St." />
+            {slotFormErrors.address && <p className="text-red-500 text-xs mt-1">{slotFormErrors.address}</p>}
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total Slots*</label>
+            <input type="number" min="1" name="totalSlots" value={slotForm.totalSlots} onChange={handleSlotFormChange} className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 ${slotFormErrors.totalSlots ? 'border-red-500' : 'border-gray-300'}`} placeholder="e.g., 120" />
+            {slotFormErrors.totalSlots && <p className="text-red-500 text-xs mt-1">{slotFormErrors.totalSlots}</p>}
+          </div>
+          <div className="flex items-center">
+            <input 
+              id="isOpen" type="checkbox" name="isOpen" checked={slotForm.isOpen} 
+              onChange={(e) => setSlotForm(prev => ({...prev, isOpen: e.target.checked}))}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="isOpen" className="ml-2 block text-sm text-gray-900">Open for bookings</label>
+          </div>
+          {slotFormErrors.general && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-md border border-red-200 text-sm">{slotFormErrors.general}</div>
+          )}
+          <div className="pt-2 flex justify-end space-x-2">
+            <button type="button" onClick={closeModal} className="px-4 py-2 rounded-md border text-gray-700">Cancel</button>
+            <button type="submit" className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <span className="flex items-center"><svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Creating...</span>
+              ) : 'Add Slot'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+      
+      {/* Update Slot Modal */}
+      <Modal
+        title={`Update Slot: ${updateSlotForm.name}`}
+        isOpen={showUpdateSlot}
+        onClose={closeModal}
+      >
+        <form className="space-y-4" onSubmit={handleUpdateSlotSubmit}>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Total Slots*</label>
+            <input type="number" min="1" name="totalSlots" value={updateSlotForm.totalSlots} onChange={handleUpdateSlotFormChange} className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-blue-500 ${updateSlotFormErrors.totalSlots ? 'border-red-500' : 'border-gray-300'}`} placeholder="e.g., 150" />
+            {updateSlotFormErrors.totalSlots && <p className="text-red-500 text-xs mt-1">{updateSlotFormErrors.totalSlots}</p>}
+          </div>
+          <div className="flex items-center">
+            <input 
+              id="updateIsOpen" type="checkbox" name="isOpen" checked={updateSlotForm.isOpen} 
+              onChange={handleUpdateSlotFormChange}
+              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+            />
+            <label htmlFor="updateIsOpen" className="ml-2 block text-sm text-gray-900">Open for bookings</label>
+          </div>
+          {updateSlotFormErrors.general && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-md border border-red-200 text-sm">{updateSlotFormErrors.general}</div>
+          )}
+          <div className="pt-2 flex justify-end space-x-2">
+            <button type="button" onClick={closeModal} className="px-4 py-2 rounded-md border text-gray-700">Cancel</button>
+            <button type="submit" className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:bg-blue-400" disabled={isUpdating}>
+              {isUpdating ? (
+                <span className="flex items-center"><svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Updating...</span>
+              ) : 'Update Slot'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
     </div>
-  )
+  );
 }
-
-

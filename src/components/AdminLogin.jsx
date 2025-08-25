@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import axios from 'axios'
 
 export default function AdminLogin() {
   const navigate = useNavigate()
@@ -26,21 +27,36 @@ export default function AdminLogin() {
     if (!validate()) return
     setIsLoading(true)
 
-    // Demo-only authentication: hardcoded admin credential
-    // Replace with real API call as needed
-    setTimeout(() => {
-      const adminEmail = 'admin@smartparking.com'
-      const adminPassword = 'Admin@123'
-      if (formData.email === adminEmail && formData.password === adminPassword) {
-        const adminUser = { email: formData.email, name: 'System Admin', role: 'admin' }
-        localStorage.setItem('isAdmin', 'true')
-        localStorage.setItem('adminUser', JSON.stringify(adminUser))
-        navigate('/admin', { replace: true })
-      } else {
-        setError('Invalid admin credentials')
+    try {
+      const {data} = await axios.post('http://localhost:8080/auth/admin/login', {
+        email: formData.email,
+        password: formData.password
+      });
+
+      // If successful, save token and admin data
+      if (data.role && data.token) {
+        localStorage.setItem('adminToken', data.token);
+        localStorage.setItem('isAdmin', 'true');
+        
+        // Redirect to admin dashboard
+        navigate('/admin', { replace: true });
       }
-      setIsLoading(false)
-    }, 800)
+    } catch (err) {
+      if (err.response && err.response.data) {
+        // Check if the error response contains a string message
+        if (typeof err.response.data === 'string') {
+          setError(err.response.data);
+        } else if (err.response.data.message) {
+          setError(err.response.data.message);
+        } else {
+          setError('Invalid admin credentials');
+        }
+      } else {
+        setError('Network error. Please try again later.');
+      }
+    } finally {
+      setIsLoading(false);
+    }
   }
 
   return (

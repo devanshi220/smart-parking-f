@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -45,19 +47,28 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!validateForm()) {
       return;
     }
-    
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Login attempt:", formData);
-      alert("Login successful! (Check console for details)");
+    try {
+      const { data } = await axios.post("http://localhost:8080/auth/login", {
+        email: formData.email,
+        password: formData.password,
+      });
+      if (data && data.token) {
+        localStorage.setItem("authToken", data.token);
+        navigate("/book-slot");
+      }
+    } catch (error) {
+      if (error.response && error.response.status === 401) {
+        alert("Incorrect credentials");
+      } else {
+        alert("Something went wrong. Please try again later.");
+      }
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (

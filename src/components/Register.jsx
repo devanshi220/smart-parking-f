@@ -1,7 +1,9 @@
 import React, { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import axios from "axios";
 
 export default function Register() {
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -73,19 +75,31 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
     if (!validateForm()) {
       return;
     }
-    
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Registration attempt:", formData);
-      alert("Registration successful! (Check console for details)");
+    try {
+      const { data } = await axios.post("http://localhost:8080/auth/register", {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        email: formData.email,
+        mobileNo: formData.mobile,
+        password: formData.password,
+      });
+      if (data && data.token) {
+        localStorage.setItem("authToken", data.token);
+        navigate("/book-slot")
+      }
+    } catch (error) {
+      if (error.response && error.response.status === 409) {
+        alert("Email already exists");
+      } else {
+        alert("Network error. Please try again later.");
+      }
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (

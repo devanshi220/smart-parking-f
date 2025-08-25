@@ -19,7 +19,7 @@ export default function HomePage() {
           </div>
           <h1 className="text-4xl md:text-5xl font-bold mb-2 drop-shadow">Find & Reserve Parking Instantly</h1>
           <p className="text-lg md:text-xl mb-6 drop-shadow">Smart solutions for hassle-free parking in urban areas</p>
-          <Link to="/book-slot" className="inline-block bg-white text-blue-600 font-semibold px-6 py-3 rounded-lg shadow-lg hover:bg-blue-50 transition duration-300 transform hover:scale-105">Book Your Slot</Link>
+          <Link to="/book-slot" className="inline-block bg-white text-blue-600 font-semibold px-6 py-3 rounded-lg shadow-lg hover:bg-blue-50 transition duration-300 transform hover:scale-105">Book Your Slot Now</Link>
         </div>
       </section>
 
@@ -207,11 +207,12 @@ export default function HomePage() {
       </section>
 
       {/* Testimonials Section */}
-      <section className="py-16 bg-gray-50">
+      {/* <section className="py-16 bg-gray-50">
         <div className="max-w-6xl mx-auto px-4">
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-12 text-gray-800">What Our Users Say</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {/* Testimonial 1 */}
+
+        
             <div className="bg-white rounded-xl p-6 shadow-md">
               <div className="flex items-center mb-4">
                 <div className="w-12 h-12 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
@@ -232,7 +233,7 @@ export default function HomePage() {
               <p className="text-gray-600">"This system has completely changed how I park. No more stress about finding a spot - I book in advance and arrive with confidence!"</p>
             </div>
 
-            {/* Testimonial 2 */}
+            
             <div className="bg-white rounded-xl p-6 shadow-md">
               <div className="flex items-center mb-4">
                 <div className="w-12 h-12 bg-green-600 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
@@ -253,7 +254,7 @@ export default function HomePage() {
               <p className="text-gray-600">"As a business owner, I love how this system manages our parking lot. The admin panel is intuitive and the real-time updates are fantastic."</p>
             </div>
 
-            {/* Testimonial 3 */}
+          
             <div className="bg-white rounded-xl p-6 shadow-md">
               <div className="flex items-center mb-4">
                 <div className="w-12 h-12 bg-purple-600 rounded-full flex items-center justify-center text-white font-bold text-lg mr-4">
@@ -275,7 +276,7 @@ export default function HomePage() {
             </div>
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Call to Action Section */}
       <section className="py-16 bg-gradient-to-r from-blue-600 to-indigo-700">
@@ -286,11 +287,7 @@ export default function HomePage() {
             <Link to="/register" className="bg-white text-blue-600 font-bold px-8 py-4 rounded-lg shadow-lg hover:bg-blue-50 transition duration-300 transform hover:scale-105">
               Get Started Now
             </Link>
-            <Link to="/login" className="bg-transparent text-white border-2 border-white font-bold px-8 py-4 rounded-lg hover:bg-white hover:text-blue-600 transition duration-300 transform hover:scale-105">
-              Sign In
-            </Link>
           </div>
-          <p className="text-blue-200 mt-6">No credit card required • Free to sign up</p>
         </div>
       </section>
 
